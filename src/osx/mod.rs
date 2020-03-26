@@ -19,6 +19,7 @@ use mach::structs::x86_thread_state64_t;
 use mach::thread_status::x86_THREAD_STATE64;
 use mach::thread_act::{thread_get_state};
 use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
+use mach::task_info::{task_flavor_t, task_info_t};
 
 pub use self::utils::{TaskLock, ThreadLock};
 
@@ -50,6 +51,7 @@ impl Process {
     pub fn exe(&self) -> Result<String, Error> {
         pidpath(self.pid).map_err(|e| Error::Other(format!("proc_pidpath failed: {}", e)))
     }
+
 
     pub fn cwd(&self) -> Result<String, Error> {
         let cwd = pidinfo::<proc_vnodepathinfo>(self.pid, 0)
@@ -118,6 +120,18 @@ impl Process {
         let memsize = thread_count as usize * std::mem::size_of::<Tid>();
         unsafe { vm_deallocate(mach_task_self(), threads as mach_vm_address_t, memsize as mach_vm_size_t); }
         Ok(ret)
+    }
+
+    pub fn used_memory(&self) -> Result<u64, Error> {
+        let flavor =  mach::task_info::TASK_BASIC_INFO;
+        let task_info: mach::task_info::task_info_t = mach::task_info::task_info_t;
+        let out_count: u32 = 0;
+        let result = unsafe { mach::task::task_info(self.task, &mut threads, tasks_info, &mut out_count) };
+        if result != KERN_SUCCESS {
+            return Err(Error::IOError(std::io::Error::last_os_error()));
+        }
+        let mem = task_info.virtual_size;
+        return Ok(mem)
     }
 
     pub fn child_processes(&self) -> Result<Vec<(Pid, Pid)>, Error> {

@@ -7,8 +7,12 @@ use winapi::shared::ntdef::PUNICODE_STRING;
 use winapi::um::handleapi::{CloseHandle};
 use winapi::um::winbase::QueryFullProcessImageNameW;
 use winapi::um::winnt::OSVERSIONINFOEXW;
+use winapi::um::psapi::{PROCESS_MEMORY_COUNTERS, GetProcessMemoryInfo};
+use std::convert::TryInto;
 use std::ffi::OsString;
+use std::mem::size_of;
 use std::os::windows::ffi::{OsStringExt};
+use std::process::{id};
 use winapi::shared::ntdef::{PVOID, NTSTATUS, USHORT, VOID, NULL};
 
 pub use read_process_memory::{Pid, ProcessHandle, CopyAddress};
@@ -55,7 +59,6 @@ extern "system" {
 
     fn NtGetNextThread(process: HANDLE, thread: HANDLE, access: ACCESS_MASK, attritubes: ULONG, flags: ULONG, new_thread: *mut HANDLE) -> NTSTATUS;
     fn NtGetNextProcess(process: HANDLE, access: ACCESS_MASK, attritubes: ULONG, flags: ULONG, new_process: *mut HANDLE) -> NTSTATUS;
-
 }
 
 impl Process {
@@ -98,6 +101,22 @@ impl Process {
         //      2) ReadProcessMemory to get RTL_USER_PROCESS_PARAMETERS struct
         //      3) get CWD from the struct (has UNICODE_DATA object with ptr + length to CWD)
         unimplemented!("cwd is unimplemented on windows")
+    }
+
+    pub fn used_memory(&self) -> Result<u64, Error> {
+
+        let mut pmc = PROCESS_MEMORY_COUNTERS::default();
+        let size = size_of::<PROCESS_MEMORY_COUNTERS>() as DWORD;
+        pmc.cb = size;
+
+        unsafe {
+            let ret = GetProcessMemoryInfo(self.handle.0, &mut pmc, size);
+            if ret == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+ 
+        Ok(pmc.WorkingSetSize.try_into().unwrap())
     }
 
     pub fn cmdline(&self) -> Result<Vec<String>, Error> {
@@ -345,3 +364,14 @@ struct PROCESS_BASIC_INFORMATION {
 
 
 unsafe impl Send for Process {}
+
+
+#[test]
+fn test_process_memory() {
+    let current_process = Process::new(id()).unwrap();
+    let mem = current_process.used_memory().unwrap();
+    assert!(mem > 0);
+    // Can't imagine this will be larger than a GB for cargo test
+    assert!(mem < 1024 * 1024 * 1024);
+    println!("{} for pid: {}", mem / (1024 * 1024), current_process.pid);
+}

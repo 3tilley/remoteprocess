@@ -49,6 +49,15 @@ impl Process {
         Ok(path.to_string_lossy().to_string())
     }
 
+    pub fn used_memory(&self) -> Result<u64, Error> {
+        let path = std::fs::read_link(format!("/proc/{}/stat", self.pid))?;
+        // rss is 24th element
+        rss_str = path.to_string_lossy()[23];
+        bytes = rss_str.parse::<u64>();
+
+        Ok(bytes)
+    }
+
     pub fn cmdline(&self) -> Result<Vec<String>, Error> {
         let mut f = std::fs::File::open(format!("/proc/{}/cmdline", self.pid))?;
         let mut buffer = Vec::new();
@@ -123,7 +132,7 @@ impl Process {
 impl super::ProcessMemory for Process {
     fn read(&self, addr: usize, buf: &mut [u8]) -> Result<(), Error> {
         let handle: ProcessHandle = self.pid.try_into()?;
-        Ok(handle.copy_address(addr, buf)?)
+        Ok(handle.copy_address(addr, buf)?) 
     }
 }
 

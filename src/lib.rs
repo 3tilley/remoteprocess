@@ -56,8 +56,6 @@ extern crate goblin;
 extern crate benfred_read_process_memory as read_process_memory;
 extern crate memmap;
 extern crate libc;
-#[macro_use]
-extern crate log;
 
 #[cfg(target_os="linux")]
 #[macro_use]
